@@ -138,7 +138,8 @@ export default function ProMainVideoPage() {
 
     (async () => {
       const token = searchParams.get('token');
-      await axios.post('process.env.REACT_APP_API_URL/validate-link', { token });
+      await axios.post(  `${process.env.REACT_APP_API_URL}/validate-link`,
+         { token });
 
       // Connect Socket.IO
       const socket = socketConnection(token);

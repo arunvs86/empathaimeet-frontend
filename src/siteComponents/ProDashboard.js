@@ -32,7 +32,8 @@ const ProDashboard = ()=>{
 
     const generateClientLink = async (appt) => {
         try {
-          const resp = await axios.get('process.env.REACT_APP_API_URL/user-link', {
+          const resp = await axios.get(  `${process.env.REACT_APP_API_URL}/validate-link`,
+             {
             params: { uuid: appt.uuid }
           });
           setClientLinks(links => ({

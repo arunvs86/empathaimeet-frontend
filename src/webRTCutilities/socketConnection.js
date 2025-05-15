@@ -24,7 +24,8 @@
 import { io } from 'socket.io-client';
 
 export default function socketConnection(token) {
-  return io('process.env.REACT_APP_API_URL', {
+  return io(  `${process.env.REACT_APP_API_URL}/validate-link`,
+   {
     auth: { jwt: token },
     secure: true,
     rejectUnauthorized: false, // dev certs only
