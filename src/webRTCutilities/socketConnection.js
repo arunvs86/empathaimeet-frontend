@@ -24,10 +24,16 @@
 import { io } from 'socket.io-client';
 
 export default function socketConnection(token) {
-  return io(  `${process.env.REACT_APP_API_URL}/validate-link`,
-   {
+  const backend = process.env.REACT_APP_API_URL;  
+  if (!backend) {
+    console.error('⚠️ REACT_APP_API_URL is not defined');
+    return null;
+  }
+
+  return io(backend, {
+    // path: '/socket.io',           // default, you can omit if untouched
+    transports: ['websocket'],    // skip polling if you only want WS
     auth: { jwt: token },
-    secure: true,
-    rejectUnauthorized: false, // dev certs only
   });
 }
+
