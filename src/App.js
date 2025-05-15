@@ -22,7 +22,7 @@
 
 // export default App;
 
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, HashRouter } from 'react-router-dom';
 import './App.css';
 import MainVideoPage from './videoComponents/MainVideoPage';
 import ProMainVideoPage from './videoComponents/ProMainVideoPage';
@@ -33,13 +33,13 @@ function Home() {
 
 function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/join-video" element={<MainVideoPage />} />
         <Route path="/join-video-pro" element={<ProMainVideoPage />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 
