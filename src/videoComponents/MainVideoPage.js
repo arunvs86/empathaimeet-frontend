@@ -127,7 +127,8 @@
 // }
 
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+// import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { useDispatch, useSelector } from 'react-redux';
 import addStream from '../redux-elements/actions/addStream';
@@ -156,8 +157,14 @@ export default function MainVideoPage() {
     let mounted = true;
 
     (async () => {
-      const token = searchParams.get('token');
-
+      // const token = searchParams.get('token');
+      const location = useLocation();
+      // location.hash might look like "#/join-video?token=eyJ..."
+      let token;
+      if (location.hash.includes('?')) {
+        const query = location.hash.split('?')[1];             // "token=eyJ..."
+        token = new URLSearchParams(query).get('token');       // "eyJ..."
+      }
       // Validate link
       const { data } = await axios.post(
         'process.env.REACT_APP_API_URL/validate-link',
