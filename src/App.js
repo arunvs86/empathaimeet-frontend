@@ -33,13 +33,13 @@ function Home() {
 
 function App() {
   return (
-    <HashRouter>
+    <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/join-video" element={<MainVideoPage />} />
         <Route path="/join-video-pro" element={<ProMainVideoPage />} />
       </Routes>
-    </HashRouter>
+    </BrowserRouter>
   );
 }
 
