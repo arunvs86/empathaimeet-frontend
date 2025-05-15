@@ -298,7 +298,6 @@
 // }
 
 import { useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { useDispatch, useSelector } from 'react-redux';
 import addStream from '../redux-elements/actions/addStream';
@@ -317,38 +316,44 @@ export default function MainVideoPage() {
   const streamsRef = useRef(null);
   const pendingIce = useRef([]);
   const socketRef = useRef(null);
-
   const smallFeedEl = useRef(null);
   const largeFeedEl = useRef(null);
 
-  const location = useLocation();
-  let token;
-  if (location.hash.includes('?')) {
-    const query = location.hash.split('?')[1];
-    token = new URLSearchParams(query).get('token');
-  }
+  // 1️⃣ Robust token extraction (from ? or from #fragment)
+  const token = (() => {
+    // Try search params first
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.has('token')) return sp.get('token');
+    // Fallback to hash
+    const h = window.location.hash;
+    const idx = h.indexOf('?');
+    if (idx !== -1) {
+      const qp = new URLSearchParams(h.substring(idx + 1));
+      if (qp.has('token')) return qp.get('token');
+    }
+    return null;
+  })();
 
-  // 1) INIT
   useEffect(() => {
+    if (!token) {
+      console.error('No token found in URL');
+      return;
+    }
     let mounted = true;
 
     (async () => {
-      if (!token) {
-        console.error('No token found in URL');
-        return;
-      }
-
-      // Validate link
+      // Validate token
       const { data } = await axios.post(
         `${process.env.REACT_APP_API_URL}/validate-link`,
         { token }
       );
       if (!mounted) return;
 
-      // Connect Socket.IO
+      // SOCKET.IO handshake
       const socket = socketConnection(token);
       socketRef.current = socket;
 
+      // Listeners
       socket.on('answerToClient', ans => {
         dispatch(updateCallStatus('answer', ans));
       });
@@ -364,7 +369,7 @@ export default function MainVideoPage() {
         largeFeedEl.current.style.display = off ? 'none' : 'block';
       });
 
-      // Get local media
+      // getUserMedia
       const localStream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
@@ -377,7 +382,7 @@ export default function MainVideoPage() {
       dispatch(updateCallStatus('audio', 'enabled'));
       dispatch(updateCallStatus('video', 'enabled'));
 
-      // Build PeerConnection
+      // PeerConnection setup
       const { peerConnection, remoteStream } = await createPeerConnection(iceC => {
         socket.emit('iceToServer', { who: 'client', iceC });
       });
@@ -400,7 +405,7 @@ export default function MainVideoPage() {
     if (streams.remote1) streamsRef.current = streams;
   }, [streams]);
 
-  // 2) SEND OFFER
+  // 2️⃣ Send SDP offer
   useEffect(() => {
     if (
       audio === 'enabled' &&
@@ -418,7 +423,7 @@ export default function MainVideoPage() {
     }
   }, [audio, video, haveCreatedOffer, dispatch]);
 
-  // 3) APPLY ANSWER + FLUSH ICE
+  // 3️⃣ Apply answer + flush ICE
   useEffect(() => {
     if (answer && haveCreatedOffer) {
       const pc = streamsRef.current.remote1.peerConnection;

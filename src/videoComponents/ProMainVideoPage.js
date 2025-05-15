@@ -268,7 +268,6 @@
 
 
 import { useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { useDispatch, useSelector } from 'react-redux';
 import addStream from '../redux-elements/actions/addStream';
@@ -284,37 +283,40 @@ export default function ProMainVideoPage() {
   const { offer, haveCreatedAnswer } = useSelector(s => s.callStatus);
   const streams = useSelector(s => s.streams);
 
-  const location = useLocation();
-  let token;
-  if (location.hash.includes('?')) {
-    const query = location.hash.split('?')[1];
-    token = new URLSearchParams(query).get('token');
-  }
-
   const streamsRef = useRef(null);
   const pendingIce = useRef([]);
   const socketRef = useRef(null);
-
   const smallFeedEl = useRef(null);
   const largeFeedEl = useRef(null);
 
-  // 1) INIT
+  // Same robust token logic
+  const token = (() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.has('token')) return sp.get('token');
+    const h = window.location.hash;
+    const idx = h.indexOf('?');
+    if (idx !== -1) {
+      const qp = new URLSearchParams(h.substring(idx + 1));
+      if (qp.has('token')) return qp.get('token');
+    }
+    return null;
+  })();
+
   useEffect(() => {
+    if (!token) {
+      console.error('No token found in URL');
+      return;
+    }
     let mounted = true;
 
     (async () => {
-      if (!token) {
-        console.error('No token in URL');
-        return;
-      }
-
-      // Validate link
+      // Validate
       await axios.post(
         `${process.env.REACT_APP_API_URL}/validate-link`,
         { token }
       );
 
-      // Connect Socket.IO
+      // Socket.IO
       const socket = socketConnection(token);
       socketRef.current = socket;
 
@@ -333,7 +335,7 @@ export default function ProMainVideoPage() {
         largeFeedEl.current.style.display = off ? 'none' : 'block';
       });
 
-      // Get local media
+      // getUserMedia
       const localStream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
@@ -346,7 +348,7 @@ export default function ProMainVideoPage() {
       dispatch(updateCallStatus('audio', 'enabled'));
       dispatch(updateCallStatus('video', 'enabled'));
 
-      // Build PeerConnection
+      // PeerConnection
       const { peerConnection, remoteStream } = await createPeerConnection(iceC => {
         socket.emit('iceToServer', { who: 'professional', iceC });
       });
@@ -364,19 +366,18 @@ export default function ProMainVideoPage() {
     };
   }, [dispatch, token]);
 
-  // Keep streamsRef
+  // keep streamsRef
   useEffect(() => {
     if (streams.remote1) streamsRef.current = streams;
   }, [streams]);
 
-  // 2) ANSWER & FLUSH ICE
+  // ANSWER + FLUSH ICE
   useEffect(() => {
     if (!offer || haveCreatedAnswer || !streamsRef.current?.remote1?.peerConnection)
       return;
     (async () => {
       const pc = streamsRef.current.remote1.peerConnection;
       await pc.setRemoteDescription(offer);
-
       pendingIce.current.forEach(c => pc.addIceCandidate(c).catch(console.error));
       pendingIce.current = [];
 
