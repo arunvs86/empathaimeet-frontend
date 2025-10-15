@@ -248,7 +248,7 @@ export default function ProMainVideoPage() {
   const [clientReady, setClientReady] = useState(false);
   const [canUnmute, setCanUnmute] = useState(true);
 
-  const API = "http://localhost:9000";
+  const API = "https://empathaimeet.onrender.com";
 
   const token = (() => {
     const sp = new URLSearchParams(window.location.search);

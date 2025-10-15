@@ -311,7 +311,7 @@ export default function MainVideoPage() {
   const [proReady, setProReady] = useState(false);
   const [canUnmute, setCanUnmute] = useState(true);
 
-  const API = "http://localhost:9000";
+  const API = "https://empathaimeet.onrender.com";
 
   // token from ? or #/…?token=
   const token = (() => {
