@@ -1,38 +1,39 @@
-import peerConfiguration from './stunServers'
+// src/webRTCutilities/createPeerConnection.js
+import peerConfiguration from './stunServers';
 
+const createPeerConnection = (addIce, onRemoteStream) => {
+  return new Promise((resolve) => {
+    const pc = new RTCPeerConnection(peerConfiguration);
 
-const createPeerConnection = (addIce)=>{
-    return new Promise(async(resolve, reject)=>{
-        const peerConnection = await new RTCPeerConnection(peerConfiguration);
-        //rtcPeerConnection is the connection to the peer.
-        //we may need more than one this time!!
-        //we pass it the config object, which is just stun servers
-        //it will get us ICE candidates
-        const remoteStream = new MediaStream();
-        peerConnection.addEventListener('signalingstatechange',(e)=>{
-            console.log("Signaling State Change")
-            console.log(e)
-        })
-        peerConnection.addEventListener('icecandidate',e=>{
-            console.log("Found ice candidate...")
-            if(e.candidate){
-                addIce(e.candidate)
-            }
-        })
-        peerConnection.addEventListener('track',e=>{
-            console.log("Got a track from the remote!")
-            e.streams[0].getTracks().forEach(track=>{
-                remoteStream.addTrack(track,remoteStream);
-                console.log("Fingers crossed...")
-            })
-        })
+    // DO NOT pre-add transceivers. We'll only use addTrack on both sides.
 
-        resolve({
-            peerConnection,
-            remoteStream,
-        })
-    })
+    // Loud state logs
+    pc.onconnectionstatechange = () =>
+      console.log('[PC] connectionState=', pc.connectionState);
+    pc.oniceconnectionstatechange = () =>
+      console.log('[PC] iceConnectionState=', pc.iceConnectionState);
+    pc.onsignalingstatechange = () =>
+      console.log('[PC] signalingState=', pc.signalingState);
 
-}
+    // Relay ICE
+    pc.onicecandidate = (e) => {
+      if (e.candidate) addIce(e.candidate);
+    };
 
-export default createPeerConnection
+    // Single remote stream delivery (first stream wins)
+    let delivered = false;
+    pc.ontrack = (e) => {
+      const stream = e.streams?.[0];
+      console.log('[PC] ontrack kind=', e.track?.kind, 'streams=', e.streams?.length);
+      if (!stream) return;
+      if (!delivered && typeof onRemoteStream === 'function') {
+        delivered = true;
+        onRemoteStream(stream);
+      }
+    };
+
+    resolve({ peerConnection: pc });
+  });
+};
+
+export default createPeerConnection;

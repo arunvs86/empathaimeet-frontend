@@ -32,7 +32,7 @@ const ProDashboard = ()=>{
 
     const generateClientLink = async (appt) => {
         try {
-          const resp = await axios.get(  `${process.env.REACT_APP_API_URL}/validate-link`,
+          const resp = await axios.get(  `https://empathai-server-gkhjhxeahmhkghd6.uksouth-01.azurewebsites.net/validate-link`,
              {
             params: { uuid: appt.uuid }
           });

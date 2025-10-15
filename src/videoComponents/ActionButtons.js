@@ -1,156 +1,51 @@
-// import { useState, useEffect, useRef } from 'react';
-// // import { useDispatch, useSelector } from 'react-redux';
-// import HangupButton from './HangupButton'
-// import socket from '../webRTCutilities/socketConnection'
-// import { useSelector } from 'react-redux';
-// import VideoButton from './VideoButton/VideoButton';
-// import AudioButton from './AudioButton/AudioButton';
-
-// const ActionButtons = ({openCloseChat,smallFeedEl, largeFeedEl})=>{
-//     const callStatus = useSelector(state=>state.callStatus);
-//     // const callStatus = useSelector(state=>state.callStatus);
-//     const menuButtons = useRef(null)
-//     let timer;
-
-
-//     useEffect(()=>{
-//         const setTimer = ()=>{
-//             // console.log(callStatus.current)
-//             if(callStatus.current !== "idle"){
-//                 timer = setTimeout(()=>{
-//                     menuButtons.current.classList.add('hidden');
-//                     // console.log("no movement for 4sec. Hiding")
-//                 }, 4000);    
-//             }
-//         }
-
-//         window.addEventListener('mousemove', ()=>{
-//             //mouse moved! 
-//             //it's hidden. Remove class to display and start the timer
-//             if (menuButtons.current && menuButtons.current.classList && menuButtons.current.classList.contains('hidden')) {
-//                 // console.log("Not showing. Show now")
-//                 menuButtons.current.classList.remove('hidden');
-//                 setTimer();
-//             }else{
-//                 // Not hidden, just reset start timer
-//                 clearTimeout(timer); //clear out the old timer
-//                 setTimer();
-//             }
-//         });
-//     },[])
-
-//     return(
-//         <div id="menu-buttons" ref={menuButtons} className="row">
-//             {/* <i className="fa fa-microphone" style="font-size:48px;color:red"></i> */}
-//             <div className="left col-2">
-//                 <AudioButton smallFeedEl={smallFeedEl}/>
-//                 <VideoButton smallFeedEl={smallFeedEl}/>
-//             </div>
-
-//             <div className="col-8 text-center">
-//                 <div className="button-wrapper d-inline-block">
-//                     <i className="fa fa-caret-up choose-video"></i>
-//                     <div className="button participants">
-//                         <i className="fa fa-users"></i>
-//                         <div className="btn-text">Participants</div>
-//                     </div>
-//                 </div>
-//                 <div className="button-no-caret d-inline-block">
-//                     <div className="button participants">
-//                         <i className="fa fa-comment" onClick={openCloseChat}></i>
-//                         <div className="btn-text" onClick={openCloseChat}>Chat</div>
-//                     </div>
-//                 </div>
-//                 <div className="button-no-caret participants d-inline-block">
-//                     <div className="button participants">
-//                         <i className="fa fa-desktop"></i>
-//                         <div className="btn-text">Share Screen</div>
-//                     </div>
-//                 </div>
-//             </div>  
-
-//             <div className="center justify-center text-end col-2">
-//                 <HangupButton
-//                     smallFeedEl={smallFeedEl}
-//                     largeFeedEl={largeFeedEl}
-//                 />
-//             </div>
-//         </div> 
-//     )
-// }
-
-// export default ActionButtons;
-
-import { useEffect, useRef } from 'react';
+// ActionButtons.jsx
 import { useDispatch, useSelector } from 'react-redux';
-import AudioButton from './AudioButton/AudioButton';
-import VideoButton from './VideoButton/VideoButton';
-import HangupButton from './HangupButton';
-import ActionButtonCaretDropDown from './ActionButtonCaretDropDown';
+import updateCallStatus from '../redux-elements/actions/updateCallStatus';
 
-const ActionButtons = ({ socket, openCloseChat, smallFeedEl, largeFeedEl }) => {
-    const callStatus = useSelector(state => state.callStatus);
-    const menuButtons = useRef(null);
-    const dispatch = useDispatch();
-    let timer;
+export default function ActionButtons({ socket }) {
+  const dispatch = useDispatch();
+  const { audio, video } = useSelector(s => s.callStatus);
+  const streams = useSelector(s => s.streams);
 
-    useEffect(() => {
-        const setTimer = () => {
-            if (callStatus.current !== 'idle') {
-                timer = setTimeout(() => {
-                    menuButtons.current.classList.add('hidden');
-                }, 4000);
-            }
-        };
+  const toggleAudio = () => {
+    const local = streams.localStream?.stream;
+    if (!local) return;
+    const willMute = audio === 'enabled';
+    local.getAudioTracks().forEach(t => (t.enabled = !willMute));
+    dispatch(updateCallStatus('audio', willMute ? 'off' : 'enabled'));
+    socket?.emit('toggleAudio', { muted: willMute }); // just to show a badge on remote
+  };
 
-        const handleMouseMove = () => {
-            if (menuButtons.current.classList.contains('hidden')) {
-                menuButtons.current.classList.remove('hidden');
-                setTimer();
-            } else {
-                clearTimeout(timer);
-                setTimer();
-            }
-        };
+  const toggleVideo = () => {
+    const local = streams.localStream?.stream;
+    if (!local) return;
+    const willOff = video === 'enabled';
+    // we only toggle the sender's track.enabled; we DO NOT hide the remote element
+    local.getVideoTracks().forEach(t => (t.enabled = !willOff));
+    dispatch(updateCallStatus('video', willOff ? 'off' : 'enabled'));
+    socket?.emit('toggleVideo', { off: willOff }); // remote shows "Video off" badge
+  };
 
-        window.addEventListener('mousemove', handleMouseMove);
-        return () => window.removeEventListener('mousemove', handleMouseMove);
-    }, [callStatus.current]);
+  const hangUp = () => {
+    // minimal hangup; you can keep your existing one if you prefer
+    Object.values(streams).forEach(({ peerConnection, stream }) => {
+      try { stream?.getTracks().forEach(tr => tr.stop()); } catch {}
+      try { peerConnection?.close(); } catch {}
+    });
+    dispatch(updateCallStatus('current', 'complete'));
+  };
 
-    return (
-        <div id="menu-buttons" ref={menuButtons} className="row">
-            <div className="left col-2">
-                <AudioButton socket={socket} />
-                <VideoButton socket={socket} />
-            </div>
-
-            <div className="col-8 text-center">
-                <div className="button-wrapper d-inline-block">
-                    <i className="fa fa-caret-up choose-video"></i>
-                    <div className="button participants">
-                        <i className="fa fa-users"></i>
-                        <div className="btn-text">Participants</div>
-                    </div>
-                </div>
-                <div className="button-no-caret d-inline-block">
-                    <div className="button participants" onClick={openCloseChat}>
-                        <i className="fa fa-comment"></i>
-                        <div className="btn-text">Chat</div>
-                    </div>
-                </div>
-                <div className="button-no-caret participants d-inline-block">
-                    <div className="button participants">
-                        <i className="fa fa-desktop"></i>
-                        <div className="btn-text">Share Screen</div>
-                    </div>
-                </div>
-            </div>
-
-            <div className="center justify-center text-end col-2">
-                <HangupButton smallFeedEl={smallFeedEl} largeFeedEl={largeFeedEl} />
-            </div>
-        </div>
-    );
-};
-
-export default ActionButtons;
+  return (
+    <div className="vc-controls">
+      <button className="vc-btn" onClick={toggleAudio}>
+        {audio === 'enabled' ? 'Mute' : 'Unmute'}
+      </button>
+      <button className="vc-btn" onClick={toggleVideo}>
+        {video === 'enabled' ? 'Stop Video' : 'Start Video'}
+      </button>
+      {/* <button className="vc-btn">Chat</button> */}
+      {/* <button className="vc-btn">Share Screen</button> */}
+      <button className="vc-btn vc-btn--danger" onClick={hangUp}>Hang Up</button>
+    </div>
+  );
+}

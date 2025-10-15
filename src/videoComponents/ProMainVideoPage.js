@@ -1,12 +1,10 @@
-// import { useEffect, useRef } from 'react';
-// import { useSearchParams } from 'react-router-dom';
+// import { useEffect, useRef, useState } from 'react';
 // import axios from 'axios';
 // import { useDispatch, useSelector } from 'react-redux';
 // import addStream from '../redux-elements/actions/addStream';
 // import updateCallStatus from '../redux-elements/actions/updateCallStatus';
 // import createPeerConnection from '../webRTCutilities/createPeerConnection';
 // import socketConnection from '../webRTCutilities/socketConnection';
-// import ChatWindow from './ChatWindow';
 // import ActionButtons from './ActionButtons';
 // import './VideoComponents.css';
 
@@ -14,267 +12,220 @@
 //   const dispatch = useDispatch();
 //   const { offer, haveCreatedAnswer } = useSelector(s => s.callStatus);
 //   const streams = useSelector(s => s.streams);
-//   const [searchParams] = useSearchParams();
+
+//   const rootRef = useRef(null);
 //   const streamsRef = useRef(null);
 //   const pendingIce = useRef([]);
 //   const socketRef = useRef(null);
 //   const smallFeedEl = useRef(null);
 //   const largeFeedEl = useRef(null);
+//   const remoteAudioEl = useRef(null);   // 🔊 hidden audio element
+
+//   // handshake flags
+//   const [iAmReady, setIAmReady] = useState(false);
+//   const [clientJoined, setClientJoined] = useState(false);
+//   const [clientReady, setClientReady] = useState(false);
+//   const [canUnmute, setCanUnmute] = useState(true);
+
+//   const API = "http://localhost:9000";
+
+//   const token = (() => {
+//     const sp = new URLSearchParams(window.location.search);
+//     if (sp.has('token')) return sp.get('token');
+//     const h = window.location.hash;
+//     const idx = h.indexOf('?');
+//     if (idx !== -1) {
+//       const qp = new URLSearchParams(h.substring(idx + 1));
+//       if (qp.has('token')) return qp.get('token');
+//     }
+//     return null;
+//   })();
 
 //   useEffect(() => {
+//     if (!token) { console.error('No token found in URL'); return; }
 //     let mounted = true;
+
 //     (async () => {
-//       const token = searchParams.get('token');
-//       await axios.post('process.env.REACT_APP_API_URL/validate-link', { token });
+//       await axios.post(`${API}/validate-link`, { token });
 
 //       const socket = socketConnection(token);
 //       socketRef.current = socket;
 
-//       // Listen for offer
+//       // handshake
+//       socket.on('clientJoined', () => { console.log('[SOCKET] clientJoined'); setClientJoined(true); });
+//       socket.on('clientReady',  () => { console.log('[SOCKET] clientReady');  setClientReady(true); });
+
+//       // signaling
 //       socket.on('newOfferWaiting', ({ offer }) => {
+//         console.log('[SOCKET] newOfferWaiting');
 //         dispatch(updateCallStatus('offer', offer));
 //       });
-//       // Listen for ICE
+
 //       socket.on('iceToClient', ({ iceC }) => {
 //         const pc = streamsRef.current?.remote1?.peerConnection;
-//         if (pc?.remoteDescription) {
-//           pc.addIceCandidate(iceC).catch(console.error);
-//         } else {
-//           pendingIce.current.push(iceC);
-//         }
+//         if (pc?.remoteDescription) pc.addIceCandidate(iceC).catch(console.error);
+//         else pendingIce.current.push(iceC);
 //       });
-//       // Listen for toggles
+
+//       // ui state from remote
 //       socket.on('toggleVideo', ({ off }) => {
-//         largeFeedEl.current.style.display = off ? 'none' : 'block';
+//         if (!rootRef.current) return;
+//         rootRef.current.classList.toggle('is-remote-video-off', !!off);
 //       });
 //       socket.on('toggleAudio', ({ muted }) => {
-//         largeFeedEl.current.muted = muted;
+//         if (!rootRef.current) return;
+//         rootRef.current.classList.toggle('is-remote-muted', !!muted);
 //       });
 
-//       // Get media
+//       // local media
 //       const localStream = await navigator.mediaDevices.getUserMedia({
-//         video: true,
-//         audio: true,
+//         video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+//         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
 //       });
 //       if (!mounted) return;
+
 //       smallFeedEl.current.srcObject = localStream;
-//       dispatch(updateCallStatus('haveMedia', true));
-//       dispatch(addStream('localStream', localStream));
-
-//       // PeerConnection
-//       const { peerConnection, remoteStream } = await createPeerConnection(iceC => {
-//         socket.emit('iceToServer', { who: 'professional', iceC });
-//       });
-//       localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
-//       dispatch(addStream('remote1', remoteStream, peerConnection));
-//       largeFeedEl.current.srcObject = remoteStream;
-//     })();
-
-//     return () => {
-//       mounted = false;
-//       socketRef.current?.disconnect();
-//     };
-//   }, [dispatch, searchParams]);
-
-//   useEffect(() => {
-//     if (streams.remote1) streamsRef.current = streams;
-//   }, [streams]);
-
-//   // Answer when offer arrives
-//   useEffect(() => {
-//     if (!offer || !streamsRef.current?.remote1?.peerConnection || haveCreatedAnswer) return;
-//     (async () => {
-//       const pc = streamsRef.current.remote1.peerConnection;
-//       await pc.setRemoteDescription(offer);
-//       pendingIce.current.forEach(c => pc.addIceCandidate(c).catch(console.error));
-//       pendingIce.current = [];
-
-//       const answer = await pc.createAnswer();
-//       await pc.setLocalDescription(answer);
-//       socketRef.current.emit('newAnswer', { answer });
-//       dispatch(updateCallStatus('haveCreatedAnswer', true));
-//       dispatch(updateCallStatus('answer', answer));
-//     })().catch(console.error);
-//   }, [offer, haveCreatedAnswer, dispatch]);
-
-//   return (
-//     <div className="video-chat-wrapper">
-//       <video ref={largeFeedEl} className="remote-video" autoPlay playsInline />
-//       <video ref={smallFeedEl} className="local-video" autoPlay playsInline muted />
-//       <ChatWindow />
-//       <ActionButtons smallFeedEl={smallFeedEl} largeFeedEl={largeFeedEl} />
-//     </div>
-//   );
-// }
-
-// ############
-
-
-// import { useEffect, useRef } from 'react';
-// // import { useSearchParams } from 'react-router-dom';
-// import { useLocation } from 'react-router-dom';
-// import axios from 'axios';
-// import { useDispatch, useSelector } from 'react-redux';
-// import addStream from '../redux-elements/actions/addStream';
-// import updateCallStatus from '../redux-elements/actions/updateCallStatus';
-// import createPeerConnection from '../webRTCutilities/createPeerConnection';
-// import socketConnection from '../webRTCutilities/socketConnection';
-// import ChatWindow from './ChatWindow';
-// import ActionButtons from './ActionButtons';
-// import './VideoComponents.css';
-
-// export default function ProMainVideoPage() {
-//   const dispatch = useDispatch();
-//   const { offer, haveCreatedAnswer } = useSelector(s => s.callStatus);
-//   const streams = useSelector(s => s.streams);
-//   // const [searchParams] = useSearchParams();
-
-//   const location = useLocation();
-// // location.hash might look like "#/join-video?token=eyJ..."
-// let token;
-// if (location.hash.includes('?')) {
-//   const query = location.hash.split('?')[1];             // "token=eyJ..."
-//   token = new URLSearchParams(query).get('token');       // "eyJ..."
-// }
-
-//   const streamsRef = useRef(null);
-//   const pendingIce = useRef([]);
-//   const socketRef = useRef(null);
-
-//   const smallFeedEl = useRef(null);
-//   const largeFeedEl = useRef(null);
-
-//   // 1) INIT
-//   useEffect(() => {
-//     let mounted = true;
-
-//     (async () => {
-//       // const token = searchParams.get('token');
-//       await axios.post(  `${process.env.REACT_APP_API_URL}/validate-link`,
-//          { token });
-
-//       // Connect Socket.IO
-//       const socket = socketConnection(token);
-//       socketRef.current = socket;
-
-//       // Listen for client offer
-//       socket.on('newOfferWaiting', ({ offer }) => {
-//         console.log('[PRO] got SDP offer', offer);
-//         dispatch(updateCallStatus('offer', offer));
-//       });
-
-//       // Listen for ICE
-//       socket.on('iceToClient', ({ iceC }) => {
-//         console.log('[PRO] got ICE', iceC);
-//         const pc = streamsRef.current?.remote1?.peerConnection;
-//         if (pc?.remoteDescription) {
-//           pc.addIceCandidate(iceC).catch(console.error);
-//         } else {
-//           pendingIce.current.push(iceC);
-//         }
-//       });
-
-//       // VIDEO toggle listener
-//       socket.on('toggleVideo', ({ off }) => {
-//         console.log('[PRO] toggleVideo remote:', off);
-//         largeFeedEl.current.style.display = off ? 'none' : 'block';
-//       });
-
-//       // Get local media
-//       const localStream = await navigator.mediaDevices.getUserMedia({
-//         video: true,
-//         audio: true,
-//       });
-//       if (!mounted) return;
-//       smallFeedEl.current.srcObject = localStream;
+//       smallFeedEl.current.muted = true;
+//       await smallFeedEl.current.play().catch(()=>{});
 
 //       dispatch(updateCallStatus('haveMedia', true));
 //       dispatch(addStream('localStream', localStream));
 //       dispatch(updateCallStatus('audio', 'enabled'));
 //       dispatch(updateCallStatus('video', 'enabled'));
 
-//       // Build PeerConnection
-//       const { peerConnection, remoteStream } = await createPeerConnection(iceC => {
-//         socket.emit('iceToServer', { who: 'professional', iceC });
-//       });
-//       localStream.getTracks().forEach(track =>
-//         peerConnection.addTrack(track, localStream)
+//       if (largeFeedEl.current) largeFeedEl.current.muted = true;
+
+//       // peer connection
+//       const { peerConnection } = await createPeerConnection(
+//         (iceC) => socket.emit('iceToServer', { who: 'pro', iceC }), // 🔁 standardized label
+//         async (remoteStream) => {
+//           if (!largeFeedEl.current) return;
+//           largeFeedEl.current.controls = true;
+//           largeFeedEl.current.muted = true;  // autoplay-safe
+//           largeFeedEl.current.srcObject = remoteStream;
+//           try { await largeFeedEl.current.play(); } catch {}
+
+//           // 🔊 mirror to hidden audio
+//           if (remoteAudioEl.current) {
+//             remoteAudioEl.current.srcObject = remoteStream;
+//             remoteAudioEl.current.muted = true;
+//             try { await remoteAudioEl.current.play(); } catch {}
+//           }
+
+//           setCanUnmute(true);
+
+//           // badges from track state
+//           remoteStream.getTracks().forEach(tr => {
+//             tr.onmute = () =>
+//               rootRef.current?.classList.add(tr.kind === 'audio' ? 'is-remote-muted' : 'is-remote-video-off');
+//             tr.onunmute = () =>
+//               rootRef.current?.classList.remove(tr.kind === 'audio' ? 'is-remote-muted' : 'is-remote-video-off');
+//           });
+//         }
 //       );
-//       dispatch(addStream('remote1', remoteStream, peerConnection));
-//       largeFeedEl.current.srcObject = remoteStream;
-//       largeFeedEl.current.style.display = 'block';
-//       console.log('[DEBUG] remote video attached and shown');
+
+//       // Only addTrack — no transceivers
+//       localStream.getTracks().forEach(track => {
+//         peerConnection.addTrack(track, localStream);
+//       });
+
+//       // Debug
+//       localStream.getTracks().forEach((t) => {
+//         console.log('[PRO] local track', t.kind, t.readyState, 'enabled=', t.enabled);
+//         t.onended = () => console.warn('[PRO] track ended', t.kind);
+//         t.onmute = () => console.warn('[PRO] track muted', t.kind);
+//         t.onunmute = () => console.warn('[PRO] track unmuted', t.kind);
+//       });
+
+//       dispatch(addStream('remote1', null, peerConnection));
+
+//       console.log('[PRO] senders now:',
+//         peerConnection.getSenders().map((s) => s.track && `${s.track.kind}:${s.track.readyState}:${s.track.enabled}`)
+//       );
+
+//       setTimeout(async () => {
+//         const stats = await peerConnection.getStats();
+//         stats.forEach((r) => {
+//           if (r.type === 'outbound-rtp' && !r.isRemote) {
+//             console.log('[PRO] outbound-rtp', r.kind, 'bytesSent=', r.bytesSent, 'framesEncoded=', r.framesEncoded);
+//           }
+//         });
+//       }, 2000);
+
+//       socket.emit('iAmReady');
+//       setIAmReady(true);
+//       console.log('[HANDSHAKE] pro iAmReady');
 //     })();
 
-//     return () => {
-//       mounted = false;
-//       socketRef.current?.disconnect();
-//     };
-//   }, [dispatch, searchParams]);
+//     return () => { mounted = false; socketRef.current?.disconnect(); };
+//   }, [dispatch, token]);
 
-//   // keep streamsRef
-//   useEffect(() => {
-//     if (streams.remote1) streamsRef.current = streams;
-//   }, [streams]);
+//   useEffect(() => { if (streams.remote1) streamsRef.current = streams; }, [streams]);
 
-//   // 2) ANSWER & FLUSH ICE
+//   // apply offer only when legal, then answer
 //   useEffect(() => {
-//     if (!offer || haveCreatedAnswer || !streamsRef.current?.remote1?.peerConnection)
-//       return;
-//     ;(async () => {
-//       const pc = streamsRef.current.remote1.peerConnection;
-//       console.log('[PRO] setting remote description');
+//     if (!offer || haveCreatedAnswer) return;
+//     const pc = streamsRef.current?.remote1?.peerConnection;
+//     if (!pc) return;
+
+//     if (!iAmReady || !clientReady) { console.log('[NEGOTIATE] defer answer: not ready'); return; }
+//     if (pc.currentRemoteDescription) { console.log('[SRD] offer skipped: already has remote'); return; }
+//     if (pc.signalingState !== 'stable') { console.log('[SRD] offer skipped: state=', pc.signalingState); return; }
+
+//     (async () => {
+//       console.log('[NEGOTIATE] applying offer + creating answer');
 //       await pc.setRemoteDescription(offer);
 
 //       pendingIce.current.forEach(c => pc.addIceCandidate(c).catch(console.error));
 //       pendingIce.current = [];
 
-//       console.log('[PRO] creating SDP answer');
 //       const answer = await pc.createAnswer();
 //       await pc.setLocalDescription(answer);
 
-//       console.log('[PRO] sending SDP answer');
 //       socketRef.current.emit('newAnswer', { answer });
 //       dispatch(updateCallStatus('haveCreatedAnswer', true));
 //       dispatch(updateCallStatus('answer', answer));
-//     })().catch(console.error);
-//   }, [offer, haveCreatedAnswer, dispatch]);
+//     })().catch(err => console.error('[SRD] offer failed', err));
+//   }, [offer, haveCreatedAnswer, iAmReady, clientReady, dispatch]);
+
+//   const unmuteRemote = async () => {
+//     if (largeFeedEl.current) {
+//       largeFeedEl.current.muted = false;
+//       try { await largeFeedEl.current.play(); } catch {}
+//     }
+//     if (remoteAudioEl.current) {
+//       remoteAudioEl.current.muted = false;
+//       try { await remoteAudioEl.current.play(); } catch {}
+//     }
+//     setCanUnmute(false);
+//   };
 
 //   return (
-//     <div className="video-chat-wrapper">
-//       <video
-//         ref={largeFeedEl}
-//         className="remote-video"
-//         autoPlay
-//         playsInline
-//       />
-//       <video
-//         ref={smallFeedEl}
-//         className="local-video"
-//         autoPlay
-//         playsInline
-//         muted
-//       />
-//       <ChatWindow />
-//       <ActionButtons
-//         socket={socketRef.current}
-//         smallFeedEl={smallFeedEl}
-//         largeFeedEl={largeFeedEl}
-//       />
+//     <div ref={rootRef} className="vc-root">
+//       <video ref={largeFeedEl} className="vc-remote" autoPlay playsInline />
+//       <video ref={smallFeedEl} className="vc-local" autoPlay playsInline muted />
+//       {/* 🔊 hidden audio element for reliable audio playback */}
+//       <audio ref={remoteAudioEl} autoPlay playsInline style={{ display: 'none' }} />
+
+//       {canUnmute && <button className="unmute-btn" onClick={unmuteRemote}>Unmute Remote</button>}
+
+//       <div className="vc-badges">
+//         <span className="vc-badge badge-muted">Remote Muted</span>
+//         <span className="vc-badge badge-videooff">Remote Video Off</span>
+//       </div>
+
+//       <ActionButtons socket={socketRef.current} />
 //     </div>
 //   );
 // }
 
-
-
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { useDispatch, useSelector } from 'react-redux';
 import addStream from '../redux-elements/actions/addStream';
 import updateCallStatus from '../redux-elements/actions/updateCallStatus';
 import createPeerConnection from '../webRTCutilities/createPeerConnection';
 import socketConnection from '../webRTCutilities/socketConnection';
-import ChatWindow from './ChatWindow';
 import ActionButtons from './ActionButtons';
 import './VideoComponents.css';
 
@@ -283,13 +234,22 @@ export default function ProMainVideoPage() {
   const { offer, haveCreatedAnswer } = useSelector(s => s.callStatus);
   const streams = useSelector(s => s.streams);
 
+  const rootRef = useRef(null);
   const streamsRef = useRef(null);
   const pendingIce = useRef([]);
   const socketRef = useRef(null);
   const smallFeedEl = useRef(null);
   const largeFeedEl = useRef(null);
+  const remoteAudioEl = useRef(null);
 
-  // Same robust token logic
+  // handshake flags
+  const [iAmReady, setIAmReady] = useState(false);
+  const [clientJoined, setClientJoined] = useState(false);
+  const [clientReady, setClientReady] = useState(false);
+  const [canUnmute, setCanUnmute] = useState(true);
+
+  const API = "http://localhost:9000";
+
   const token = (() => {
     const sp = new URLSearchParams(window.location.search);
     if (sp.has('token')) return sp.get('token');
@@ -302,82 +262,130 @@ export default function ProMainVideoPage() {
     return null;
   })();
 
+  // One-time "first gesture" handler: unmute + play
   useEffect(() => {
-    if (!token) {
-      console.error('No token found in URL');
-      return;
-    }
+    const onFirstGesture = async () => {
+      try {
+        if (largeFeedEl.current) {
+          largeFeedEl.current.muted = false;
+          await largeFeedEl.current.play();
+        }
+        if (remoteAudioEl.current) {
+          remoteAudioEl.current.muted = false;
+          await remoteAudioEl.current.play();
+        }
+        setCanUnmute(false);
+      } catch {}
+      window.removeEventListener('pointerdown', onFirstGesture);
+      window.removeEventListener('keydown', onFirstGesture);
+    };
+    window.addEventListener('pointerdown', onFirstGesture, { once: true });
+    window.addEventListener('keydown', onFirstGesture, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', onFirstGesture);
+      window.removeEventListener('keydown', onFirstGesture);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!token) { console.error('No token found in URL'); return; }
     let mounted = true;
 
     (async () => {
-      // Validate
-      await axios.post(
-        `${process.env.REACT_APP_API_URL}/validate-link`,
-        { token }
-      );
+      await axios.post(`${API}/validate-link`, { token });
 
-      // Socket.IO
       const socket = socketConnection(token);
       socketRef.current = socket;
 
+      // handshake
+      socket.on('clientJoined', () => { console.log('[SOCKET] clientJoined'); setClientJoined(true); });
+      socket.on('clientReady',  () => { console.log('[SOCKET] clientReady');  setClientReady(true); });
+
+      // signaling
       socket.on('newOfferWaiting', ({ offer }) => {
+        console.log('[SOCKET] newOfferWaiting');
         dispatch(updateCallStatus('offer', offer));
       });
+
       socket.on('iceToClient', ({ iceC }) => {
         const pc = streamsRef.current?.remote1?.peerConnection;
-        if (pc?.remoteDescription) {
-          pc.addIceCandidate(iceC).catch(console.error);
-        } else {
-          pendingIce.current.push(iceC);
-        }
-      });
-      socket.on('toggleVideo', ({ off }) => {
-        largeFeedEl.current.style.display = off ? 'none' : 'block';
+        if (pc?.remoteDescription) pc.addIceCandidate(iceC).catch(console.error);
+        else pendingIce.current.push(iceC);
       });
 
-      // getUserMedia
+      // ui state from remote
+      socket.on('toggleVideo', ({ off }) => rootRef.current?.classList.toggle('is-remote-video-off', !!off));
+      socket.on('toggleAudio', ({ muted }) => rootRef.current?.classList.toggle('is-remote-muted', !!muted));
+
+      // local media
       const localStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
+        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
       if (!mounted) return;
+
       smallFeedEl.current.srcObject = localStream;
+      smallFeedEl.current.muted = true;
+      await smallFeedEl.current.play().catch(()=>{});
 
       dispatch(updateCallStatus('haveMedia', true));
       dispatch(addStream('localStream', localStream));
       dispatch(updateCallStatus('audio', 'enabled'));
       dispatch(updateCallStatus('video', 'enabled'));
 
-      // PeerConnection
-      const { peerConnection, remoteStream } = await createPeerConnection(iceC => {
-        socket.emit('iceToServer', { who: 'professional', iceC });
-      });
-      localStream.getTracks().forEach(track =>
-        peerConnection.addTrack(track, localStream)
+      if (largeFeedEl.current) largeFeedEl.current.muted = true;
+
+      // peer connection
+      const { peerConnection } = await createPeerConnection(
+        (iceC) => socket.emit('iceToServer', { who: 'pro', iceC }),
+        async (remoteStream) => {
+          if (!largeFeedEl.current) return;
+          largeFeedEl.current.muted = true;  // autoplay-safe
+          largeFeedEl.current.srcObject = remoteStream;
+          try { await largeFeedEl.current.play(); } catch {}
+
+          if (remoteAudioEl.current) {
+            remoteAudioEl.current.srcObject = remoteStream;
+            remoteAudioEl.current.muted = true;
+            try { await remoteAudioEl.current.play(); } catch {}
+          }
+
+          setCanUnmute(true);
+
+          remoteStream.getTracks().forEach(tr => {
+            tr.onmute = () => rootRef.current?.classList.add(tr.kind === 'audio' ? 'is-remote-muted' : 'is-remote-video-off');
+            tr.onunmute = () => rootRef.current?.classList.remove(tr.kind === 'audio' ? 'is-remote-muted' : 'is-remote-video-off');
+          });
+        }
       );
-      dispatch(addStream('remote1', remoteStream, peerConnection));
-      largeFeedEl.current.srcObject = remoteStream;
-      largeFeedEl.current.style.display = 'block';
+
+      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+      dispatch(addStream('remote1', null, peerConnection));
+
+      socket.emit('iAmReady');
+      setIAmReady(true);
+      console.log('[HANDSHAKE] pro iAmReady');
     })();
 
-    return () => {
-      mounted = false;
-      socketRef.current?.disconnect();
-    };
+    return () => { mounted = false; socketRef.current?.disconnect(); };
   }, [dispatch, token]);
 
-  // keep streamsRef
-  useEffect(() => {
-    if (streams.remote1) streamsRef.current = streams;
-  }, [streams]);
+  useEffect(() => { if (streams.remote1) streamsRef.current = streams; }, [streams]);
 
-  // ANSWER + FLUSH ICE
+  // apply offer only when legal, then answer
   useEffect(() => {
-    if (!offer || haveCreatedAnswer || !streamsRef.current?.remote1?.peerConnection)
-      return;
+    if (!offer || haveCreatedAnswer) return;
+    const pc = streamsRef.current?.remote1?.peerConnection;
+    if (!pc) return;
+
+    if (!iAmReady || !clientReady) { console.log('[NEGOTIATE] defer answer: not ready'); return; }
+    if (pc.currentRemoteDescription) { console.log('[SRD] offer skipped: already has remote'); return; }
+    if (pc.signalingState !== 'stable') { console.log('[SRD] offer skipped: state=', pc.signalingState); return; }
+
     (async () => {
-      const pc = streamsRef.current.remote1.peerConnection;
+      console.log('[NEGOTIATE] applying offer + creating answer');
       await pc.setRemoteDescription(offer);
+
       pendingIce.current.forEach(c => pc.addIceCandidate(c).catch(console.error));
       pendingIce.current = [];
 
@@ -387,20 +395,36 @@ export default function ProMainVideoPage() {
       socketRef.current.emit('newAnswer', { answer });
       dispatch(updateCallStatus('haveCreatedAnswer', true));
       dispatch(updateCallStatus('answer', answer));
-    })().catch(console.error);
-  }, [dispatch, offer, haveCreatedAnswer]);
+    })().catch(err => console.error('[SRD] offer failed', err));
+  }, [offer, haveCreatedAnswer, iAmReady, clientReady, dispatch]);
+
+  const unmuteRemote = async () => {
+    if (largeFeedEl.current) {
+      largeFeedEl.current.muted = false;
+      try { await largeFeedEl.current.play(); } catch {}
+    }
+    if (remoteAudioEl.current) {
+      remoteAudioEl.current.muted = false;
+      try { await remoteAudioEl.current.play(); } catch {}
+    }
+    setCanUnmute(false);
+  };
 
   return (
-    <div className="video-chat-wrapper">
-      <video ref={largeFeedEl} className="remote-video" autoPlay playsInline />
-      <video ref={smallFeedEl} className="local-video" autoPlay playsInline muted />
-      <ChatWindow />
-      <ActionButtons
-        socket={socketRef.current}
-        smallFeedEl={smallFeedEl}
-        largeFeedEl={largeFeedEl}
-      />
+    <div ref={rootRef} className="vc-root">
+      {/* remove controls → we handle audio programmatically */}
+      <video ref={largeFeedEl} className="vc-remote" autoPlay playsInline />
+      <video ref={smallFeedEl} className="vc-local" autoPlay playsInline muted />
+      <audio ref={remoteAudioEl} autoPlay playsInline style={{ display: 'none' }} />
+
+      {canUnmute && <button className="unmute-btn" onClick={unmuteRemote}>Unmute Remote</button>}
+
+      <div className="vc-badges">
+        <span className="vc-badge badge-muted">Remote Muted</span>
+        <span className="vc-badge badge-videooff">Remote Video Off</span>
+      </div>
+
+      <ActionButtons socket={socketRef.current} />
     </div>
   );
 }
-
